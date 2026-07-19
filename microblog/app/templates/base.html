@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    {% if title %}
+       <title>{{title}}-microblog</title>
+    {% else %}
+       <title>welcome to microblog</title>
+    {% endif %}
+</head>
+<body>
+<div>
+  microblog:
+    <a href="{{ url_for('index') }}">home</a>
+    {% if current_user.is_anonymous %}
+    <a href="{{ url_for('login') }}">login</a>
+    {% else %}
+    <a href="{{ url_for('logout') }}">logout</a>
+    {% endif %}
+</div>
+
+    {% block content %}
+    {% endblock %}
+</body>
+</html>
