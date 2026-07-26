@@ -3,7 +3,8 @@
 from flask import render_template, redirect, url_for, flash
 
 from app import app
-from app.forms import loginForm,RegistrationForm
+from app.email import send_password_reset_email
+from app.forms import loginForm, RegistrationForm, ResetPasswordForm
 # from forms import LoginForm
 from flask_login import current_user, login_user, logout_user, login_required
 
@@ -115,3 +116,93 @@ def edit_profile():
         form.username.data = current_user.username
         form.about_me.data = current_user.about_me
     return render_template('edit_profile.html', title='Edit Profile', form=form)
+
+#关注用户
+@app.route('/follow/<username>')
+@login_required
+def follow(username):
+    from app.models import User
+    from app import db
+    user = User.query.filter_by(username=username).first()
+    if user is None:
+        flash('User {} not found.'.format(username))
+        return redirect(url_for('index'))
+    if user == current_user:
+        flash('You cannot follow yourself!')
+        return redirect(url_for('user', username=username))
+    current_user.follow(user)
+    db.session.commit()
+    flash('You are following {}!'.format(username))
+    return redirect(url_for('user', username=username))
+
+# 取消用户关注
+@app.route('/unfollow/<username>')
+@login_required
+def unfollow(username):
+    from app.models import User
+    from app import db
+    user = User.query.filter_by(username=username).first()
+    if user is None:
+        flash('User {} not found.'.format(username))
+        return redirect(url_for('index'))
+    if user == current_user:
+        flash('You cannot unfollow yourself!')
+        return redirect(url_for('user', username=username))
+    current_user.unfollow(user)
+    db.session.commit()
+    flash('You are not following {}.'.format(username))
+    return redirect(url_for('user', username=username))
+
+
+from app.forms import ResetPasswordRequestForm
+from app.email import send_password_reset_email
+
+@app.route('/reset_password_request', methods=['GET','POST'])
+def reset_password_request():
+    from app.models import User
+    from app import db
+    # 如果用户已经登录，直接重定向到主页，不需要重置密码
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    # 创建表单实例
+    form = ResetPasswordRequestForm()
+    # 判断：POST提交 + 表单校验通过
+    if form.validate_on_submit():
+        # 根据邮箱查询用户
+        user = User.query.filter_by(email=form.email.data).first()
+        # 如果该邮箱存在对应的用户
+        if user:
+            # 发送重置密码邮件
+            send_password_reset_email(user)
+        # 无论邮箱是否存在，都给出相同提示（安全，防止攻击者探测邮箱）
+        flash('Check your email for the instructions to reset your password')
+        # 跳转到登录页面
+        return redirect(url_for('login'))
+    # GET请求 / 表单校验失败：渲染重置密码请求页面
+    return render_template('reset_password_request.html', title='Reset Password', form=form)
+
+@app.route('/reset_password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    from app.models import User
+    from app import db
+    # 如果用户已经登录，直接跳主页，无需重置密码
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    # 校验token，获取用户对象
+    user = User.verify_reset_password_token(token)
+    # token无效/过期，跳转首页
+    if not user:
+        return redirect(url_for('index'))
+    # 实例化重置密码表单
+    form = ResetPasswordForm()
+    # POST提交表单验证
+    if form.validate_on_submit():
+        # 设置新密码（内部自动哈希加密）
+        user.set_password(form.password.data)
+        db.session.commit()
+        # 闪现提示
+        flash('Your password has been reset.')
+        # 修改完成跳转登录页面
+        return redirect(url_for('login'))
+    # GET请求：渲染重置密码页面，展示输入新密码表单
+    return render_template('reset_password.html', form=form)

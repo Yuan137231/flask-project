@@ -1,6 +1,7 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask_mail import Mail
 
 
 from config import Config
@@ -14,6 +15,7 @@ app.config.from_object(Config)
 print(app.config['SECRET_KEY'])
 db=SQLAlchemy(app)
 migrate=Migrate(app,db)
+mail=Mail(app)
 
 # 延迟导入，解决循环导入报错
 

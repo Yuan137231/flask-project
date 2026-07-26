@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
+
    <h1>Sigin in</h1>
    <form action="" method="post" novalidate>
        {{form.hidden_tag()}}
@@ -18,6 +19,10 @@
            {{form.submit()}}
        </p>
        <p>New User? <a href="{{ url_for('register') }}">Click to Register!</a></p>
+       <p>
+            Forgot Your Password?
+            <a href="{{ url_for('reset_password_request') }}">Click to Reset It</a>
+       </p>
    </form>
 
 {% endblock %}
