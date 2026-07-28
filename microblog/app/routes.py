@@ -1,14 +1,17 @@
 
 
-from flask import render_template, redirect, url_for, flash
+from flask import render_template, redirect, url_for, flash, request
 
 from app import app
 from app.email import send_password_reset_email
-from app.forms import loginForm, RegistrationForm, ResetPasswordForm
+from app.forms import loginForm, RegistrationForm, ResetPasswordForm, PostForm
 # from forms import LoginForm
 from flask_login import current_user, login_user, logout_user, login_required
 
 from datetime import datetime
+
+from app.models import Post
+
 
 # ...
 
@@ -18,22 +21,26 @@ def before_request():
     if current_user.is_authenticated:
         current_user.last_seen = datetime.utcnow()
         db.session.commit()
-@app.route('/')
-@app.route('/index')
+@app.route('/', methods=['GET', 'POST'])
+@app.route('/index', methods=['GET', 'POST'])
 @login_required
 def index():
+    from app.models import User
+    from app import db
     # user={'username':'ysx'}
-    posts = [
-        {
-            'author': {'username': 'John'},
-            'body': 'Beautiful day in Portland!'
-        },
-        {
-            'author': {'username': 'Susan'},
-            'body': 'The Avengers movie was so cool!'
-        }
-    ]
-    return render_template('index.html',title='Home',posts=posts)
+    form = PostForm()
+    if form.validate_on_submit():
+        post = Post(body=form.post.data, author=current_user)
+        db.session.add(post)
+        db.session.commit()
+        flash('Your post is now live!')
+        return redirect(url_for('index'))
+    # posts = current_user.followed_posts().all() 查询当前用户所有的帖子
+    page = request.args.get('page', 1, type=int)
+    posts = current_user.followed_posts().paginate(page=page, per_page=app.config['POSTS_PER_PAGE'], error_out=False)#分页查询
+    next_url = url_for('index', page=posts.next_num) if posts.has_next else None
+    prev_url = url_for('index', page=posts.prev_num) if posts.has_prev else None
+    return render_template('index.html', title='index',form=form, posts=posts.items, next_url=next_url, prev_url=prev_url)
 
 @app.route('/login',methods=['GET','POST'])
 def login():
@@ -90,11 +97,15 @@ def register():
 def user(username):
     from app.models import User
     user = User.query.filter_by(username=username).first_or_404()
-    posts = [
-        {'author': user, 'body':'Test post #1'},
-        {'author': user, 'body':'Test post #2'}
-    ]
-    return render_template('user.html', user=user, posts=posts)
+    # posts = user.posts.order_by(Post.timestamp.desc()).all()
+    # return render_template('user.html', user=user, posts=posts)
+    page = request.args.get('page', 1, type=int)
+    posts = current_user.followed_posts().paginate(page=page, per_page=app.config['POSTS_PER_PAGE'],
+                                                   error_out=False)  # 分页查询
+    next_url = url_for('user', username=user.username,page=posts.next_num) if posts.has_next else None
+    prev_url = url_for('user', username=user.username,page=posts.prev_num) if posts.has_prev else None
+    return render_template('user.html', title='index',user=user, posts=posts.items, next_url=next_url, prev_url=prev_url)
+
 
 from app.forms import EditProfileForm
 # ...
@@ -206,3 +217,13 @@ def reset_password(token):
         return redirect(url_for('login'))
     # GET请求：渲染重置密码页面，展示输入新密码表单
     return render_template('reset_password.html', form=form)
+
+@app.route('/explore')
+@login_required
+def explore():
+    # posts = Post.query.order_by(Post.timestamp.desc()).all()
+    page = request.args.get('page', 1, type=int)
+    posts = current_user.followed_posts().paginate(page=page, per_page=app.config['POSTS_PER_PAGE'],error_out=False)  # 分页查询
+    next_url = url_for('explore', page=posts.next_num) if posts.has_next else None
+    prev_url = url_for('explore', page=posts.prev_num) if posts.has_prev else None
+    return render_template('index.html', title='Explore', posts=posts.items, next_url=next_url, prev_url=prev_url)
